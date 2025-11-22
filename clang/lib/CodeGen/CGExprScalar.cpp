@@ -2970,6 +2970,12 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
 
 Value *ScalarExprEmitter::VisitStmtExpr(const StmtExpr *E) {
   CodeGenFunction::StmtExprEvaluation eval(CGF);
+  // If the statement expression is an lvalue, emit it as an lvalue and return
+  // its address. Otherwise, emit to a temporary and load.
+  if (E->isLValue()) {
+    LValue LV = CGF.EmitStmtExprLValue(E);
+    return LV.getPointer(CGF);
+  }
   Address RetAlloca = CGF.EmitCompoundStmt(*E->getSubStmt(),
                                            !E->getType()->isVoidType());
   if (!RetAlloca.isValid())

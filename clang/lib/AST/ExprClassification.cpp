@@ -442,8 +442,10 @@ static Cl::Kinds ClassifyInternal(ASTContext &Ctx, const Expr *E) {
 
     case Expr::StmtExprClass: {
       const auto *CS = cast<StmtExpr>(E)->getSubStmt();
+      if (CS->body_empty())
+        return Cl::CL_PRValue;
+      
       const Stmt *Tail = CS->body_back();
-    
       auto *TailExpr = dyn_cast<Expr>(Tail);
       if (!TailExpr)
         return Cl::CL_PRValue;
