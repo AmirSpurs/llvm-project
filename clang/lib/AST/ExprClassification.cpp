@@ -701,7 +701,7 @@ static Cl::ModifiableType IsModifiable(ASTContext &Ctx, const Expr *E,
   if (Kind != Cl::CL_LValue)
     return Cl::CM_RValue;
 
-  // This is the lvalue case.
+  
   // Functions are lvalues in C++, but not modifiable. (C++ [basic.lval]p6)
   if (Ctx.getLangOpts().CPlusPlus && E->getType()->isFunctionType())
     return Cl::CM_Function;

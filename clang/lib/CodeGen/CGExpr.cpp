@@ -6418,48 +6418,41 @@ LValue CodeGenFunction::EmitObjCIvarRefLValue(const ObjCIvarRefExpr *E) {
 }
 
 LValue CodeGenFunction::EmitStmtExprLValue(const StmtExpr *E) {
-  StmtExprEvaluation eval(*this);
+  
+  RunCleanupsScope Cleanups(*this);
+  LexicalScope LexScope(*this, E->getSourceRange());
+  
+
   const CompoundStmt *S = E->getSubStmt();
   
-  // Emit all statements except the last one
   for (CompoundStmt::const_body_iterator I = S->body_begin(),
                                          End = S->body_end() - 1;
        I != End; ++I)
     EmitStmt(*I);
   
-  // Handle the last statement
   if (S->body_empty()) {
-    // Empty statement expression - return default (invalid) lvalue
     return LValue{};
   }
   
-  // Get the last statement, handling labels and attributed statements
   const Stmt *LastStmt = S->body_back();
-  while (!isa<Expr>(LastStmt)) {
-    if (const auto *LS = dyn_cast<LabelStmt>(LastStmt)) {
-      EmitLabel(LS->getDecl());
-      LastStmt = LS->getSubStmt();
-    } else if (const auto *AS = dyn_cast<AttributedStmt>(LastStmt)) {
-      LastStmt = AS->getSubStmt();
-    } else {
-      llvm_unreachable("unknown value statement");
-    }
+  
+  const Expr *LastExpr = dyn_cast_or_null<Expr>(LastStmt);
+  if (!LastExpr) {
+    const Stmt *Last = S->body_back();
+    LastExpr = dyn_cast<Expr>(Last->IgnoreContainers(true));
   }
+
+
   
   EnsureInsertPoint();
+
   
-  const Expr *LastExpr = cast<Expr>(LastStmt);
-  
-  // If the last expression is an lvalue, emit it as an lvalue directly.
-  // We need to look through LValueToRValue casts that might have been
-  // implicitly added.
   const Expr *StrippedLastExpr = LastExpr->IgnoreParenImpCasts();
   if (StrippedLastExpr->isLValue()) {
     return EmitLValue(StrippedLastExpr);
   }
   
-  // For non-lvalues, create a temporary (this path should ideally not be taken
-  // if the Sema classification is correct for lvalue StmtExprs).
+  // For non-lvalues, create a temporary 
   RValue RV = EmitAnyExprToTemp(E);
   return MakeAddrLValue(RV.getAggregateAddress(), E->getType(),
                         AlignmentSource::Decl);
