@@ -13891,22 +13891,16 @@ static void DiagnoseRecursiveConstFields(Sema &S, const Expr *E,
 static bool CheckForModifiableLvalue(Expr *E, SourceLocation Loc, Sema &S) {
   assert(!E->hasPlaceholderType(BuiltinType::PseudoObject));
 
-  // Statement expressions with side effects (declarations, assignments, etc.)
-  // should not be assignable because the side effects make the semantics unclear.
   if (const auto *SE = dyn_cast<StmtExpr>(E)) {
     const CompoundStmt *CS = SE->getSubStmt();
     if (CS->body_empty())
       return false;
     
-    // Check if there are declarations before the last statement (those are side effects)
-    for (CompoundStmt::const_body_iterator I = CS->body_begin(),
-                                           End = CS->body_end() - 1;
-         I != End; ++I) {
-      if (isa<DeclStmt>(*I)) {
-        S.Diag(SE->getExprLoc(), diag::err_typecheck_expression_not_modifiable_lvalue)
-            << SE->getSourceRange();
-        return true;
-      }
+    // Reject if there are multiple statements (GCC only allows single statements)
+    if (CS->size() > 1) {
+      S.Diag(SE->getExprLoc(), diag::err_typecheck_expression_not_modifiable_lvalue)
+          << SE->getSourceRange();
+      return true;
     }
     
     const Stmt *LastStmt = CS->body_back();
