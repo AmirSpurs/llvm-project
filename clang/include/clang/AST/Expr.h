@@ -4531,8 +4531,9 @@ class StmtExpr : public Expr {
   SourceLocation LParenLoc, RParenLoc;
 public:
   StmtExpr(CompoundStmt *SubStmt, QualType T, SourceLocation LParenLoc,
-           SourceLocation RParenLoc, unsigned TemplateDepth)
-      : Expr(StmtExprClass, T, VK_PRValue, OK_Ordinary), SubStmt(SubStmt),
+           SourceLocation RParenLoc, unsigned TemplateDepth = 0,
+           ExprValueKind VK = VK_PRValue, ExprObjectKind OK = OK_Ordinary)
+      : Expr(StmtExprClass, T, VK, OK), SubStmt(SubStmt),
         LParenLoc(LParenLoc), RParenLoc(RParenLoc) {
     setDependence(computeDependence(this, TemplateDepth));
     // FIXME: A templated statement expression should have an associated

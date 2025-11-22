@@ -13891,6 +13891,40 @@ static void DiagnoseRecursiveConstFields(Sema &S, const Expr *E,
 static bool CheckForModifiableLvalue(Expr *E, SourceLocation Loc, Sema &S) {
   assert(!E->hasPlaceholderType(BuiltinType::PseudoObject));
 
+  if (const auto *SE = dyn_cast<StmtExpr>(E)) {
+    const CompoundStmt *CS = SE->getSubStmt();
+    if (CS->body_empty())
+      return false;
+    
+    // Reject if there are multiple statements (GCC only allows single statements)
+    if (CS->size() > 1) {
+      S.Diag(SE->getExprLoc(), diag::err_typecheck_expression_not_modifiable_lvalue)
+          << SE->getSourceRange();
+      return true;
+    }
+    
+    const Stmt *LastStmt = CS->body_back();
+    const Expr *LastExpr = dyn_cast<Expr>(LastStmt->IgnoreContainers(true));
+    
+    // Check if it's a declaration
+    if (!LastExpr && isa<DeclStmt>(LastStmt)) {
+      S.Diag(SE->getExprLoc(), diag::err_typecheck_expression_not_modifiable_lvalue)
+          << SE->getSourceRange();
+      return true;
+    }
+    // Check if it's an assignment 
+    if (LastExpr) {
+      LastExpr = LastExpr->IgnoreParenImpCasts();
+      if (const auto *BO = dyn_cast<BinaryOperator>(LastExpr)) {
+        if (BO->isAssignmentOp()) {
+          S.Diag(SE->getExprLoc(), diag::err_typecheck_expression_not_modifiable_lvalue)
+              << SE->getSourceRange();
+          return true;
+        }
+      }
+    }
+  }
+
   S.CheckShadowingDeclModification(E, Loc);
 
   SourceLocation OrigLoc = Loc;
@@ -16184,11 +16218,18 @@ ExprResult Sema::BuildStmtExpr(SourceLocation LPLoc, Stmt *SubStmt,
   // as the type of the stmtexpr.
   QualType Ty = Context.VoidTy;
   bool StmtExprMayBindToTemp = false;
+  ExprValueKind VK = VK_PRValue;
+  ExprObjectKind OK = OK_Ordinary; 
   if (!Compound->body_empty()) {
     if (const auto *LastStmt = dyn_cast<ValueStmt>(Compound->body_back())) {
       if (const Expr *Value = LastStmt->getExprStmt()) {
         StmtExprMayBindToTemp = true;
         Ty = Value->getType();
+        if (getLangOpts().CPlusPlus) {
+          const Expr *FinalExpr = Value->IgnoreImplicit();
+          VK = FinalExpr->getValueKind();
+          OK = FinalExpr->getObjectKind();
+        }
       }
     }
   }
@@ -16196,7 +16237,7 @@ ExprResult Sema::BuildStmtExpr(SourceLocation LPLoc, Stmt *SubStmt,
   // FIXME: Check that expression type is complete/non-abstract; statement
   // expressions are not lvalues.
   Expr *ResStmtExpr =
-      new (Context) StmtExpr(Compound, Ty, LPLoc, RPLoc, TemplateDepth);
+      new (Context) StmtExpr(Compound, Ty, LPLoc, RPLoc, TemplateDepth, VK, OK);
   if (StmtExprMayBindToTemp)
     return MaybeBindToTemporary(ResStmtExpr);
   return ResStmtExpr;

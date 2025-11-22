@@ -440,12 +440,24 @@ static Cl::Kinds ClassifyInternal(ASTContext &Ctx, const Expr *E) {
   case Expr::DesignatedInitExprClass:
     return ClassifyInternal(Ctx, cast<DesignatedInitExpr>(E)->getInit());
 
-  case Expr::StmtExprClass: {
-    const CompoundStmt *S = cast<StmtExpr>(E)->getSubStmt();
-    if (const auto *LastExpr = dyn_cast_or_null<Expr>(S->body_back()))
-      return ClassifyUnnamed(Ctx, LastExpr->getType());
-    return Cl::CL_PRValue;
-  }
+    case Expr::StmtExprClass: {
+      const auto *CS = cast<StmtExpr>(E)->getSubStmt();
+      if (CS->body_empty())
+        return Cl::CL_PRValue;
+      
+      const Stmt *Tail = CS->body_back();
+      auto *TailExpr = dyn_cast<Expr>(Tail);
+      if (!TailExpr)
+        return Cl::CL_PRValue;
+    
+      if (Lang.CPlusPlus) {
+        TailExpr = TailExpr->IgnoreImplicit();
+        return ClassifyInternal(Ctx, TailExpr);
+      }
+    
+      // C mode: GNU semantics
+      return ClassifyUnnamed(Ctx, TailExpr->getType());
+    }
 
   case Expr::PackExpansionExprClass:
     return ClassifyInternal(Ctx, cast<PackExpansionExpr>(E)->getPattern());
@@ -689,7 +701,7 @@ static Cl::ModifiableType IsModifiable(ASTContext &Ctx, const Expr *E,
   if (Kind != Cl::CL_LValue)
     return Cl::CM_RValue;
 
-  // This is the lvalue case.
+  
   // Functions are lvalues in C++, but not modifiable. (C++ [basic.lval]p6)
   if (Ctx.getLangOpts().CPlusPlus && E->getType()->isFunctionType())
     return Cl::CM_Function;
