@@ -16184,11 +16184,18 @@ ExprResult Sema::BuildStmtExpr(SourceLocation LPLoc, Stmt *SubStmt,
   // as the type of the stmtexpr.
   QualType Ty = Context.VoidTy;
   bool StmtExprMayBindToTemp = false;
+  ExprValueKind VK = VK_PRValue;
+  ExprObjectKind OK = OK_Ordinary; 
   if (!Compound->body_empty()) {
     if (const auto *LastStmt = dyn_cast<ValueStmt>(Compound->body_back())) {
       if (const Expr *Value = LastStmt->getExprStmt()) {
         StmtExprMayBindToTemp = true;
         Ty = Value->getType();
+        if (getLangOpts().CPlusPlus) {
+          const Expr *ForClass = Value->IgnoreImplicit();
+          VK = ForClass->getValueKind();
+          OK = ForClass->getObjectKind();
+        }
       }
     }
   }
@@ -16196,7 +16203,7 @@ ExprResult Sema::BuildStmtExpr(SourceLocation LPLoc, Stmt *SubStmt,
   // FIXME: Check that expression type is complete/non-abstract; statement
   // expressions are not lvalues.
   Expr *ResStmtExpr =
-      new (Context) StmtExpr(Compound, Ty, LPLoc, RPLoc, TemplateDepth);
+      new (Context) StmtExpr(Compound, Ty, LPLoc, RPLoc, TemplateDepth, VK, OK);
   if (StmtExprMayBindToTemp)
     return MaybeBindToTemporary(ResStmtExpr);
   return ResStmtExpr;

@@ -440,12 +440,9 @@ static Cl::Kinds ClassifyInternal(ASTContext &Ctx, const Expr *E) {
   case Expr::DesignatedInitExprClass:
     return ClassifyInternal(Ctx, cast<DesignatedInitExpr>(E)->getInit());
 
-  case Expr::StmtExprClass: {
-    const CompoundStmt *S = cast<StmtExpr>(E)->getSubStmt();
-    if (const auto *LastExpr = dyn_cast_or_null<Expr>(S->body_back()))
-      return ClassifyUnnamed(Ctx, LastExpr->getType());
-    return Cl::CL_PRValue;
-  }
+  case Expr::StmtExprClass:
+    // The value kind is already set correctly in BuildStmtExpr, so just use it.
+    return ClassifyExprValueKind(Lang, E, E->getValueKind());
 
   case Expr::PackExpansionExprClass:
     return ClassifyInternal(Ctx, cast<PackExpansionExpr>(E)->getPattern());
